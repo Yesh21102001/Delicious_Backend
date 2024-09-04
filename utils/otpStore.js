@@ -1,28 +1,34 @@
-const otpStore = new Map(); // Using a Map to store OTPs in memory
+const otpStore = new Map();
+const verifiedStore = new Map();
 
-// Store OTP with an expiration
-const storeOTP = (identifier, otp, expiresInMs) => {
-  
-  otpStore.set(identifier, { otp, expiresAt: Date.now() + expiresInMs });
-
-  // Automatically delete the OTP after it expires
-  setTimeout(() => otpStore.delete(identifier), expiresInMs);
+module.exports.storeOTP = (email, otp, ttl) => {
+  otpStore.set(email, { otp, expiresAt: Date.now() + ttl });
 };
 
-// Verify OTP
-const verifyOTP = (identifier, otp) => {
-  const otpData = otpStore.get(identifier);
+module.exports.verifyOTP = (email, otp) => {
+  const otpData = otpStore.get(email);
+  if (!otpData) return false;
 
-  if (!otpData) {
-    return false; // OTP not found or expired
+  const { otp: storedOTP, expiresAt } = otpData;
+  if (Date.now() > expiresAt) {
+    otpStore.delete(email);
+    return false;
   }
 
-  if (otpData.otp === otp && otpData.expiresAt > Date.now()) {
-    otpStore.delete(identifier); // OTP is valid, delete it after verification
-    return true;
-  }
+  if (storedOTP !== otp) return false;
 
-  return false;
+  otpStore.delete(email);
+  return true;
 };
 
-module.exports = { storeOTP, verifyOTP };
+module.exports.storeVerifiedStatus = (email) => {
+  verifiedStore.set(email, true);
+};
+
+module.exports.isVerified = (email) => {
+  return verifiedStore.get(email) || false;
+};
+
+module.exports.clearVerifiedStatus = (email) => {
+  verifiedStore.delete(email);
+};
