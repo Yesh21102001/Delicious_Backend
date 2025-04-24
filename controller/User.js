@@ -4,6 +4,7 @@ const User = require("../model/User");
 const generateOTP = require("../utils/otpGenerator");
 const sendOTPEmail = require("../utils/sendEmail");
 const otpHandler = require("../utils/otpStore");
+
 exports.registerUser = async (req, res) => {
   try {
     const { fullName, email, phoneNumber, password } = req.body;
@@ -123,7 +124,6 @@ exports.signInUser = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 
 // Step 1: Initiate Password Reset - Send OTP
 exports.initiatePasswordReset = async (req, res) => {

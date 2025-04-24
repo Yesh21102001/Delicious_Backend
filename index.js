@@ -1,39 +1,31 @@
-// index.js (main server file)
-
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const userRoutes = require("./route/User");
-
-// Load environment variables from .env file
 require("dotenv").config();
 
-const app = express();
+const userRoutes = require("./route/User");
+const Restaurant = require("./route/Restaurant");
+const Menu = require("./route/Menu");
+const authRoutes  = require("./route/Auth");
 
-// Use the port from the environment variable or default to 2000
+const app = express();
 const PORT = process.env.PORT || 2000;
 
+// Middleware FIRST
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); 
 
-// Connect to MongoDB using the URI from the environment variable
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-
-mongoose.connection.on("connected", () => {
-  console.log("Connected to MongoDB successfully.");
-});
-
-mongoose.connection.on("error", (err) => {
-  console.error("Error connecting to MongoDB:", err);
-});
-
-// Use the user routes
+// Routes
 app.use("/api", userRoutes);
+app.use("/api", Menu);
+app.use("/api", Restaurant);
+app.use("/api/admin", authRoutes);
 
-// Start the server
+// DB connection
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log("Connected to MongoDB successfully."))
+  .catch((err) => console.error("Error connecting to MongoDB:", err));
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
