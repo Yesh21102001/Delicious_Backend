@@ -1,24 +1,25 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const path = require("path"); // <-- Import path
 require("dotenv").config();
 
 const userRoutes = require("./route/User");
-const Restaurant = require("./route/Restaurant");
 const Menu = require("./route/Menu");
-const authRoutes  = require("./route/Auth");
+const authRoutes = require("./route/Auth");
 
 const app = express();
 const PORT = process.env.PORT || 2000;
 
-// Middleware FIRST
+// Middleware
 app.use(cors());
-app.use(express.json()); 
+app.use(express.json());
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use("/api", userRoutes);
-app.use("/api", Menu);
-app.use("/api", Restaurant);
+app.use("/api/menu", Menu);
 app.use("/api/admin", authRoutes);
 
 // DB connection

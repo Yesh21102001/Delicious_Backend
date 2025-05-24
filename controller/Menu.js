@@ -1,8 +1,18 @@
 const Menu = require("../model/Menu");
 const multer = require("multer");
+const fs = require("fs");
 const path = require("path");
 
-// ==== Multer Setup ====
+// Delete uploaded image file
+const deleteImageFile = (filename) => {
+  if (!filename) return;
+  const filePath = path.join(__dirname, "../uploads", filename);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+};
+
+// Multer setup
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "uploads/");
@@ -12,115 +22,181 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
-// =======================
-
-// You can export this to use in routes
 exports.upload = upload;
 
-// Get all categories
+// GET all menu categories
 exports.getAllMenus = async (req, res) => {
   try {
     const menus = await Menu.find();
     res.status(200).json(menus);
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch all menus", error: err });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch menus", error: err.message });
   }
 };
 
-// Get menu by restaurant
-exports.getMenuByRestaurant = async (req, res) => {
+// POST create new category
+exports.createCategory = async (req, res) => {
   try {
-    const { restaurantId } = req.params;
-    const menu = await Menu.find({ restaurantId });
-    res.status(200).json(menu);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch menu", error: err });
-  }
-};
-
-// Create category with items + images
-exports.createMenuCategory = async (req, res) => {
-  try {
-    const { name, restaurantId, items } = req.body;
-    const parsedItems = JSON.parse(items); // array
-    const uploadedFiles = req.files;
-
-    const itemsWithImages = parsedItems.map((item, index) => ({
-      ...item,
-      image: uploadedFiles[index]?.filename || null,
-    }));
-
-    const newCategory = new Menu({
-      name,
-      restaurantId,
-      items: itemsWithImages,
-    });
-
+    const { name } = req.body;
+    const newCategory = new Menu({ name, items: [] });
     await newCategory.save();
-    res.status(201).json(newCategory);
+    res.status(201).json({ message: "Category created", data: newCategory });
   } catch (err) {
-    res.status(500).json({ message: "Failed to create menu category", error: err });
+    res
+      .status(500)
+      .json({ message: "Failed to create category", error: err.message });
   }
 };
 
-// Update category
-exports.updateMenuCategory = async (req, res) => {
+// POST /api/menu/:categoryId/addItem
+exports.addItemToCategory = async (req, res) => {
   try {
     const { categoryId } = req.params;
-    const { name, isEnabled } = req.body;
+    const { itemName, itemCost, isEnabled } = req.body;
+    const image = req.file ? req.file.filename : null;
 
-    const updated = await Menu.findByIdAndUpdate(
-      categoryId,
-      { name, isEnabled },
-      { new: true }
-    );
+    const category = await Menu.findById(categoryId);
+    if (!category)
+      return res.status(404).json({ message: "Category not found" });
 
-    res.status(200).json(updated);
+    category.items.push({
+      itemName,
+      itemCost,
+      image,
+      isEnabled: isEnabled !== undefined ? isEnabled : true,
+    });
+
+    await category.save();
+    res.status(201).json({ message: "Item added", data: category });
   } catch (err) {
-    res.status(500).json({ message: "Failed to update category", error: err });
+    res.status(500).json({ message: "Failed to add item", error: err.message });
   }
 };
 
-// Delete category
-exports.deleteMenuCategory = async (req, res) => {
+// GET by ID (category or item)
+exports.getById = async (req, res) => {
+  const { id } = req.params;
+
   try {
-    await Menu.findByIdAndDelete(req.params.categoryId);
-    res.status(200).json({ message: "Category deleted" });
+    const category = await Menu.findById(id);
+    if (category)
+      return res.status(200).json({ type: "category", data: category });
+
+    const menus = await Menu.find();
+    for (const menu of menus) {
+      const item = menu.items.id(id);
+      if (item) {
+        return res
+          .status(200)
+          .json({ type: "item", data: item, categoryId: menu._id });
+      }
+    }
+
+    res.status(404).json({ message: "Category or item not found" });
   } catch (err) {
-    res.status(500).json({ message: "Delete failed", error: err });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
-// Update a specific item
-exports.updateMenuItem = async (req, res) => {
-  try {
-    const { categoryId, itemId } = req.params;
-    const { name, cost, isEnabled } = req.body;
+exports.updateCategoryById = async (req, res) => {
+  const { id } = req.params;
+  const { name, isEnabled } = req.body;
+  const image = req.file ? req.file.filename : null;
 
-    const menu = await Menu.findById(categoryId);
-    const item = menu.items.id(itemId);
+  try {
+    const category = await Menu.findById(id);
+    if (!category) return res.status(404).json({ message: "Category not found" });
+
+    if (image && category.image) deleteImageFile(category.image);
+
+    if (name !== undefined) category.name = name;
+    if (isEnabled !== undefined) category.isEnabled = isEnabled;
+    if (image) category.image = image;
+
+    await category.save();
+    res.status(200).json({ message: "Category updated", data: category });
+  } catch (error) {
+    res.status(500).json({ message: "Update error", error: error.message });
+  }
+};
+
+exports.updateItemById = async (req, res) => {
+  const { categoryId, itemId } = req.params;
+  const { itemName, itemCost, isEnabled } = req.body;
+  const image = req.file ? req.file.filename : null;
+
+  try {
+    const category = await Menu.findById(categoryId);
+    if (!category) return res.status(404).json({ message: "Category not found" });
+
+    const item = category.items.id(itemId);
     if (!item) return res.status(404).json({ message: "Item not found" });
 
-    item.name = name ?? item.name;
-    item.cost = cost ?? item.cost;
-    item.isEnabled = isEnabled ?? item.isEnabled;
+    if (image && item.image) deleteImageFile(item.image);
 
-    await menu.save();
-    res.status(200).json(menu);
-  } catch (err) {
-    res.status(500).json({ message: "Update item failed", error: err });
+    if (itemName !== undefined) item.itemName = itemName;
+    if (itemCost !== undefined) item.itemCost = itemCost;
+    if (isEnabled !== undefined) item.isEnabled = isEnabled;
+    if (image) item.image = image;
+
+    await category.save();
+    res.status(200).json({ message: "Item updated", data: item });
+  } catch (error) {
+    res.status(500).json({ message: "Item update failed", error: error.message });
   }
 };
 
-// Delete item
-exports.deleteMenuItem = async (req, res) => {
+exports.deleteCategoryById = async (req, res) => {
+  const { id } = req.params;
   try {
-    const { categoryId, itemId } = req.params;
-    const menu = await Menu.findById(categoryId);
-    menu.items.id(itemId).remove();
-    await menu.save();
+    const category = await Menu.findById(id);
+    if (!category) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    // Delete all item images
+    category.items.forEach((item) => deleteImageFile(item.image));
+
+    // Delete category image if exists
+    if (category.image) deleteImageFile(category.image);
+
+    // Delete category from DB
+    await Menu.findByIdAndDelete(id);
+
+    res.status(200).json({ message: "Category and its items deleted" });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Category deletion failed", error: error.message });
+  }
+};
+
+exports.deleteItemById = async (req, res) => {
+  const { categoryId, itemId } = req.params;
+
+  try {
+    const category = await Menu.findById(categoryId);
+    if (!category) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    const item = category.items.id(itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Item not found" });
+    }
+
+    // Delete image if present
+    if (item.image) deleteImageFile(item.image);
+
+    // Remove item from array
+    category.items = category.items.filter(i => i._id.toString() !== itemId);
+
+    await category.save();
+
     res.status(200).json({ message: "Item deleted" });
-  } catch (err) {
-    res.status(500).json({ message: "Delete item failed", error: err });
+  } catch (error) {
+    res.status(500).json({ message: "Item deletion failed", error: error.message });
   }
 };

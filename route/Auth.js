@@ -6,8 +6,6 @@ const authenticateJWT = require("../Middleware/Auth");
 
 // Public login route
 router.post('/login', loginAdmin);
-
-// Protected dashboard route
 router.get('/dashboard', authenticateJWT, dashboard);
 
 module.exports = router;
